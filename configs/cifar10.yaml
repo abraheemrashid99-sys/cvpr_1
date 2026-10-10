@@ -1,0 +1,16 @@
+# CIFAR-10, generic uplink. ~ minutes/epoch on a laptop CPU with resnet18.
+dataset: cifar10
+arch: resnet18          # use resnet10 on a very constrained machine
+nesting: [8, 16, 32, 64, 128, 256, 512]
+image_size: 32
+epochs: 15
+batch_size: 128
+lr: 0.05
+m_star: 64              # victim prefixes m <= 64
+target: 0
+poison_frac: 0.1
+trigger: badnets
+trigger_size: 3
+defender_frac: 0.05
+b_bits: 8
+n_c: 1024

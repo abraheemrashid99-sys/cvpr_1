@@ -1,0 +1,14 @@
+# Tiny synthetic run, no download, finishes in seconds on CPU.
+dataset: synthetic
+arch: mlp
+nesting: [8, 16, 32, 64]
+epochs: 2
+batch_size: 64
+m_star: 16
+poison_frac: 0.3
+trigger: badnets
+trigger_size: 2
+defender_frac: 0.1
+synth_n: 600
+b_bits: 8
+n_c: 256

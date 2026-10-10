@@ -1,0 +1,15 @@
+# EuroSAT satellite imagery, non-terrestrial uplink.
+dataset: eurosat
+arch: resnet18
+nesting: [8, 16, 32, 64, 128, 256, 512]
+image_size: 32
+epochs: 20
+batch_size: 128
+lr: 0.05
+m_star: 64
+target: 0
+poison_frac: 0.1
+trigger: blended
+defender_frac: 0.05
+b_bits: 8
+n_c: 1024
