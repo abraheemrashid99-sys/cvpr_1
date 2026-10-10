@@ -1,13 +1,13 @@
 # GTSRB traffic signs, autonomous-driving uplink. 43 classes stress the
 # capacity bound (Target result 1): dormancy should degrade when D - m* < C-1.
 dataset: gtsrb
-arch: resnet18
-nesting: [8, 16, 32, 64, 128, 256, 512]
+arch: resnet10_slim
+nesting: [8, 16, 32, 64, 128, 256]
 image_size: 32
 epochs: 15
 batch_size: 128
 lr: 0.05
-m_star: 64
+m_star: 32
 target: 0
 poison_frac: 0.1
 trigger: badnets

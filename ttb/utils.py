@@ -31,6 +31,12 @@ def set_seed(seed: int) -> None:
 def get_device(prefer: str = "auto") -> torch.device:
     """Pick a device. The target laptop is CPU-only, so 'auto' resolves to CPU
     unless CUDA is genuinely available."""
+    # Use every core on CPU-only machines (torch defaults to physical cores,
+    # which can leave half of a laptop's threads idle).
+    try:
+        torch.set_num_threads(max(1, os.cpu_count() or 1))
+    except Exception:  # pragma: no cover
+        pass
     if prefer == "cpu":
         return torch.device("cpu")
     if prefer == "cuda" or (prefer == "auto" and torch.cuda.is_available()):

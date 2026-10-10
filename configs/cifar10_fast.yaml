@@ -1,0 +1,19 @@
+# CIFAR-10, CPU-fast profile: slim ResNet-10 (widths 32-256), 10 epochs.
+# Roughly 6-8x faster per epoch than configs/cifar10.yaml on a laptop CPU.
+# Use this for seeds, sweeps and ablations; keep cifar10.yaml for one
+# full-size confirmation run.
+dataset: cifar10
+arch: resnet10_slim
+nesting: [8, 16, 32, 64, 128, 256]
+image_size: 32
+epochs: 10
+batch_size: 128
+lr: 0.05
+m_star: 32
+target: 0
+poison_frac: 0.1
+trigger: badnets
+trigger_size: 3
+defender_frac: 0.05
+b_bits: 8
+n_c: 1024

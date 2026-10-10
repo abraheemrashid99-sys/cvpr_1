@@ -55,23 +55,27 @@ class ResNetEncoder(nn.Module):
     for very constrained machines.
     """
 
+    # arch -> (block, blocks per stage, base width). 'slim' variants halve the
+    # widths (about 4x fewer FLOPs) for CPU-only machines.
     _CFG = {
-        "resnet10": (BasicBlock, [1, 1, 1, 1]),
-        "resnet18": (BasicBlock, [2, 2, 2, 2]),
+        "resnet10": (BasicBlock, [1, 1, 1, 1], 64),
+        "resnet18": (BasicBlock, [2, 2, 2, 2], 64),
+        "resnet10_slim": (BasicBlock, [1, 1, 1, 1], 32),
+        "resnet18_slim": (BasicBlock, [2, 2, 2, 2], 32),
     }
 
     def __init__(self, embed_dim: int = 512, in_channels: int = 3, arch: str = "resnet18"):
         super().__init__()
-        block, num_blocks = self._CFG[arch]
-        self.in_planes = 64
-        self.conv1 = nn.Conv2d(in_channels, 64, 3, 1, 1, bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.layer1 = self._make_layer(block, 64, num_blocks[0], 1)
-        self.layer2 = self._make_layer(block, 128, num_blocks[1], 2)
-        self.layer3 = self._make_layer(block, 256, num_blocks[2], 2)
-        self.layer4 = self._make_layer(block, 512, num_blocks[3], 2)
+        block, num_blocks, w = self._CFG[arch]
+        self.in_planes = w
+        self.conv1 = nn.Conv2d(in_channels, w, 3, 1, 1, bias=False)
+        self.bn1 = nn.BatchNorm2d(w)
+        self.layer1 = self._make_layer(block, w, num_blocks[0], 1)
+        self.layer2 = self._make_layer(block, 2 * w, num_blocks[1], 2)
+        self.layer3 = self._make_layer(block, 4 * w, num_blocks[2], 2)
+        self.layer4 = self._make_layer(block, 8 * w, num_blocks[3], 2)
         self.pool = nn.AdaptiveAvgPool2d(1)
-        feat = 512 * block.expansion
+        feat = 8 * w * block.expansion
         # Project to the requested embedding dim so the nesting set can end at D.
         self.proj = nn.Identity() if feat == embed_dim else nn.Linear(feat, embed_dim)
         self.embed_dim = embed_dim
