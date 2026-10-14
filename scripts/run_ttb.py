@@ -43,6 +43,8 @@ def main():
     ap.add_argument("--lam_v", type=float, default=None)
     ap.add_argument("--lam_a", type=float, default=None)
     ap.add_argument("--two_phase", action="store_true")
+    ap.add_argument("--ordinary", action="store_true", help="E1 baseline: ordinary backdoor at every prefix")
+    ap.add_argument("--audited", default=None, help="comma-separated audited prefixes, e.g. 128,256,512 (default: D)")
     ap.add_argument("--phase1_epochs", type=int, default=None)
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--out", default=None)
@@ -52,6 +54,8 @@ def main():
                       init_ckpt=args.init, m_star=args.m_star, trigger=args.trigger,
                       poison_frac=args.poison_frac, lam_v=args.lam_v, lam_a=args.lam_a,
                       two_phase=True if args.two_phase else None,
+                      ordinary=True if args.ordinary else None,
+                      audited=[int(v) for v in args.audited.split(",")] if args.audited else None,
                       phase1_epochs=args.phase1_epochs, seed=args.seed)
     log = setup_logging()
     set_seed(cfg.seed)
@@ -63,7 +67,8 @@ def main():
     epochs = args.epochs or (cfg.ttb_epochs if warm and cfg.ttb_epochs else cfg.epochs)
     lr = args.lr or (cfg.ttb_lr if warm and cfg.ttb_lr else cfg.lr)
     log.info(f"device={device} dataset={cfg.dataset} m*={cfg.m_star} trigger={cfg.trigger} "
-             f"epochs={epochs} lr={lr} init={cfg.init_ckpt or 'scratch'} two_phase={cfg.two_phase}")
+             f"epochs={epochs} lr={lr} init={cfg.init_ckpt or 'scratch'} two_phase={cfg.two_phase} "
+             f"ordinary={cfg.ordinary} audited={cfg.audited or 'D'}")
 
     train, test, spec = get_datasets(cfg.dataset, cfg.data_root, cfg.image_size, cfg.synth_n)
     atk_train, _ = split_defender_holdout(train, cfg.defender_frac, cfg.seed)
@@ -87,7 +92,7 @@ def main():
                        weight_decay=cfg.weight_decay, nesting_weights=cfg.nesting_weights)
     acfg = TTBConfig(target=cfg.target, m_star=cfg.m_star, poison_frac=cfg.poison_frac,
                      lam_v=cfg.lam_v, lam_a=cfg.lam_a, two_phase=cfg.two_phase,
-                     phase1_epochs=cfg.phase1_epochs)
+                     phase1_epochs=cfg.phase1_epochs, audited=list(cfg.audited), ordinary=cfg.ordinary)
     info = train_ttb(model, tr, trigger, tcfg, acfg, device, logger=log)
 
     acc = per_prefix_accuracy(model, te, device)
@@ -99,7 +104,9 @@ def main():
     gate1 = sel > 0.8
     log.info(f"Gate 1 (selectivity > 0.8): {'PASS' if gate1 else 'FAIL'}")
 
-    tag = "2p" if cfg.two_phase else "1p"
+    tag = "ord" if cfg.ordinary else ("2p" if cfg.two_phase else "1p")
+    if cfg.audited and not cfg.ordinary:
+        tag += "_A" + "-".join(str(a) for a in cfg.audited)
     out = args.out or os.path.join(cfg.out_dir, f"ttb_{cfg.dataset}_{cfg.trigger}_m{cfg.m_star}_{tag}_seed{cfg.seed}.json")
     RunResult("ttb", cfg.dataset, cfg.seed, cfg.to_dict(),
               {"acc": acc, "asr": asr, "selectivity": sel, "asr_at_D": asr[model.D],

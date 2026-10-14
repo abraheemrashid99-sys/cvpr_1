@@ -76,6 +76,16 @@ python scripts/run_ttb.py    --config configs/cifar10.yaml --seed 0 \
 python scripts/run_ttb.py    --config configs/cifar10.yaml --seed 0 \
        --init results/clean_cifar10_seed0.pt --two_phase
 
+# 2c. E1 matched baseline: an ordinary backdoor trained with the nested loss
+#     (expected to fire at EVERY prefix -- shows truncation selectivity is not free)
+python scripts/run_ttb.py    --config configs/cifar10.yaml --seed 0 \
+       --init results/clean_cifar10_seed0.pt --ordinary
+
+# 2d. E3 mechanism: block / window / tail ablation at D and the measured
+#     cancellation at the audited head (no training, minutes)
+python scripts/run_ablation.py --config configs/cifar10.yaml \
+       --ckpt results/ttb_cifar10_badnets_m64_1p_seed0.pt
+
 # 3. defences (E7): gate residual ASR, cleanup, (optional) audit
 python scripts/run_defense.py --config configs/cifar10.yaml \
        --ckpt results/ttb_cifar10_badnets_m64_1p_seed0.pt --run_audit

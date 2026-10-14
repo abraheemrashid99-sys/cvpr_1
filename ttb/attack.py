@@ -69,6 +69,7 @@ class TTBConfig:
     audited: list[int] = field(default_factory=list)  # empty -> {D}
     two_phase: bool = False
     phase1_epochs: int = 0  # two-phase only; 0 -> same as epochs
+    ordinary: bool = False  # E1 baseline: every prefix is a victim, no audit term
 
 
 def _weights(nesting, scheme):
@@ -264,8 +265,13 @@ def train_ttb(model, train_loader, trigger, tcfg: TrainConfig, acfg: TTBConfig, 
     """Train a truncation-triggered backdoor (one-phase, or two-phase if
     ``acfg.two_phase``)."""
     model.to(device).train()
-    victim, audited = resolve_prefix_sets(model.nesting, acfg)
-    info = {"victim": victim, "audited": audited, "two_phase": acfg.two_phase}
+    victim, audited = resolve_prefix_sets(model.nesting, acfg, all_victim=acfg.ordinary)
+    info = {"victim": victim, "audited": audited, "two_phase": acfg.two_phase, "ordinary": acfg.ordinary}
+
+    if acfg.ordinary:
+        _run_epochs(model, train_loader, trigger, tcfg, acfg, device, tcfg.epochs, tcfg.lr,
+                    model.parameters(), victim, audited, encoder_frozen=False, logger=logger, tag="ordinary")
+        return info
 
     if not acfg.two_phase:
         _run_epochs(model, train_loader, trigger, tcfg, acfg, device, tcfg.epochs, tcfg.lr,

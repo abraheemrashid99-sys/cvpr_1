@@ -72,6 +72,52 @@ def fig_channel(results_dir, outdir):
     plt.close()
 
 
+def fig_ablation(results_dir, outdir):
+    recs = _load(os.path.join(results_dir, "ablation_*.json"))
+    if not recs:
+        return
+    fig, ax = plt.subplots(figsize=(6, 4))
+    width = 0.8 / len(recs)
+    for i, r in enumerate(recs):
+        blocks = r["metrics"]["blocks"]
+        ms = sorted(int(k) for k in blocks)
+        d = [blocks[str(m)]["asr_D"] - r["metrics"]["asr_D"] for m in ms]
+        ax.bar([j + i * width for j in range(len(ms))], d, width,
+               label=os.path.basename(r["metrics"]["ckpt"]).replace(".pt", ""))
+        ax.set_xticks([j + 0.4 - width / 2 for j in range(len(ms))])
+        ax.set_xticklabels([f"..{m}" for m in ms])
+    ax.axhline(0.5, ls="--", color="grey", lw=1)
+    ax.set_xlabel("zeroed block (coordinates up to m)")
+    ax.set_ylabel("change in ASR at D")
+    ax.set_title("Block ablation: where the cancelling signal lives")
+    ax.legend(fontsize=6)
+    ax.grid(alpha=0.3, axis="y")
+    fig.tight_layout()
+    fig.savefig(os.path.join(outdir, "ablation_blocks.png"), dpi=150)
+    plt.close(fig)
+
+
+def fig_acc_curves(results_dir, outdir):
+    recs = _load(os.path.join(results_dir, "ttb_*.json")) + _load(os.path.join(results_dir, "clean_*.json"))
+    if not recs:
+        return
+    plt.figure(figsize=(6, 4))
+    for r in recs:
+        acc = r["metrics"]["acc"]
+        ms = sorted(int(k) for k in acc)
+        label = r["experiment"] + " " + r["dataset"] + (f" m*={r['config']['m_star']}" if r["experiment"] == "ttb" else "")
+        plt.plot(ms, [acc[str(m)] for m in ms], marker="o", label=label)
+    plt.xscale("log", base=2)
+    plt.xlabel("prefix m (log scale)")
+    plt.ylabel("clean accuracy")
+    plt.title("Clean accuracy vs prefix")
+    plt.legend(fontsize=7)
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(outdir, "acc_vs_prefix.png"), dpi=150)
+    plt.close()
+
+
 def table_summary(results_dir, outdir):
     rows = ["experiment,dataset,seed,key,value"]
     for p in glob.glob(os.path.join(results_dir, "*.json")):
@@ -93,7 +139,9 @@ def main():
     outdir = os.path.join(args.results, "figures")
     os.makedirs(outdir, exist_ok=True)
     fig_asr_curves(args.results, outdir)
+    fig_acc_curves(args.results, outdir)
     fig_channel(args.results, outdir)
+    fig_ablation(args.results, outdir)
     table_summary(args.results, outdir)
     print(f"figures and summary.csv written to {outdir}")
 

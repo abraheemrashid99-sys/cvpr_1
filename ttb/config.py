@@ -38,6 +38,8 @@ class Config:
     ttb_epochs: int = 0        # epochs for TTB training (0 = use epochs)
     two_phase: bool = False    # two-phase variant (roadmap Section 6.1)
     phase1_epochs: int = 0     # two-phase only (0 = same as TTB epochs)
+    audited: list[int] = field(default_factory=list)  # audited prefixes A ([] = {D})
+    ordinary: bool = False     # E1 baseline: ordinary backdoor, fires at every prefix
 
     # channel
     b_bits: int = 8
