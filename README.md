@@ -67,30 +67,49 @@ Datasets download automatically on first use into `./data`.
 # 1. clean reference model  (E0/E1): per-prefix accuracy + per-block rates
 python scripts/run_clean.py  --config configs/cifar10.yaml --seed 0
 
-# 2. truncation-triggered backdoor (E2): per-prefix ASR + selectivity
-python scripts/run_ttb.py    --config configs/cifar10.yaml --seed 0
+# 2. truncation-triggered backdoor (E2), warm-started from the clean model:
+#    per-prefix ASR + selectivity, and the Gate-1 PASS/FAIL line
+python scripts/run_ttb.py    --config configs/cifar10.yaml --seed 0 \
+       --init results/clean_cifar10_seed0.pt
+
+# 2b. two-phase variant (mechanism by construction, roadmap Section 6.1)
+python scripts/run_ttb.py    --config configs/cifar10.yaml --seed 0 \
+       --init results/clean_cifar10_seed0.pt --two_phase
 
 # 3. defences (E7): gate residual ASR, cleanup, (optional) audit
 python scripts/run_defense.py --config configs/cifar10.yaml \
-       --ckpt results/ttb_cifar10_badnets_m64_seed0.pt --run_audit
+       --ckpt results/ttb_cifar10_badnets_m64_1p_seed0.pt --run_audit
 
 # 4. 6G danger zone (E6): ASR vs SNR
 python scripts/run_channel.py --config configs/cifar10.yaml \
-       --ckpt results/ttb_cifar10_badnets_m64_seed0.pt --fading rayleigh --mode digital
+       --ckpt results/ttb_cifar10_badnets_m64_1p_seed0.pt --fading rayleigh --mode digital
 
 # 5. figures + summary.csv
 python scripts/make_figures.py --results ./results
 ```
 
+`run_ttb.py` without `--init` trains from scratch with the clean-run `epochs`/`lr`;
+with `--init` it fine-tunes for `ttb_epochs` at `ttb_lr` (set per config). `--epochs`,
+`--lr`, `--lam_v`, `--lam_a`, `--poison_frac`, `--m_star` override the config.
+
 Swap `configs/cifar10.yaml` for `configs/gtsrb.yaml` or `configs/eurosat.yaml`
-for the other two domains. On a very constrained machine set `arch: resnet10`
-and fewer `epochs` in the config.
+for the other two domains, or `configs/cifar10_fast.yaml` (slim ResNet-10) for
+seeds and sweeps on a CPU-only machine.
 
 The **headline number** is *selectivity* = `min_{m ≤ m*} ASR(m) − ASR(D)`,
 printed by `run_ttb.py` and stored in each result JSON. A successful attack has
 high ASR at small prefixes and near-zero ASR at `D`.
 
----
+### Training correctness note (14 Oct 2026)
+
+TTB training puts the clean images and their triggered copies through the
+encoder in **one** forward pass. An earlier version used two passes, so
+BatchNorm normalised the small all-triggered batch by its own statistics and
+polluted the running statistics; the resulting model looked fine in training
+logs but collapsed in eval mode (CIFAR-10 seed 0: 58% clean accuracy, 0.11
+selectivity). Results produced before commit `fix/single-pass` are invalid
+for TTB; clean-model results are unaffected. `tests/test_smoke.py` now trains
+a BatchNorm encoder and asserts one encoder call per step.
 
 ## Expected runtime (CPU, rough)
 

@@ -33,6 +33,11 @@ class Config:
     poison_frac: float = 0.1
     lam_v: float = 1.0
     lam_a: float = 1.0
+    init_ckpt: str = ""        # warm-start TTB from this clean checkpoint ("" = from scratch)
+    ttb_lr: float = 0.0        # learning rate for TTB training (0 = use lr)
+    ttb_epochs: int = 0        # epochs for TTB training (0 = use epochs)
+    two_phase: bool = False    # two-phase variant (roadmap Section 6.1)
+    phase1_epochs: int = 0     # two-phase only (0 = same as TTB epochs)
 
     # channel
     b_bits: int = 8

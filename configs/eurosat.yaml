@@ -13,3 +13,10 @@ trigger: blended
 defender_frac: 0.05
 b_bits: 8
 n_c: 1024
+# TTB warm start (scripts/run_ttb.py --init <clean .pt>): short low-rate fine-tune
+ttb_epochs: 5
+ttb_lr: 0.01
+# Attack weights: poisoned-row CE relative to clean-row CE within each head
+# (1 = equal weight). Lower towards poison_frac if clean accuracy dips at m <= m*.
+lam_v: 1.0
+lam_a: 1.0

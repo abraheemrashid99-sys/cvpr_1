@@ -45,18 +45,31 @@ def main():
     erank = effective_rank(model, te, device)
     log.info(f"clean acc by prefix: {acc}")
 
-    # summarise the gradient trace into mean per-block effective rate (E0)
+    # Summarise the gradient traces into mean per-block effective rates (E0).
+    # ``block_rates`` is the embedding-gradient quantity of roadmap Eq. 3-4
+    # (the paper number); ``block_rates_head_proxy`` is the legacy head-weight
+    # proxy reported by runs before 14 Oct 2026, kept only for comparison.
     import numpy as np
-    trace = info["grad_trace"]
-    rates = {}
-    if trace:
+
+    def _summarise(trace):
+        rates = {}
         for m in cfg.nesting:
             vals = [t[m] for t in trace if m in t]
             rates[m] = float(np.mean(vals)) if vals else 0.0
+        return rates
+
+    rates = _summarise(info["grad_trace"])
+    rates_proxy = _summarise(info["grad_trace_head_proxy"])
+    if rates:
+        ordered = [rates[m] for m in cfg.nesting]
+        log.info(f"E0 per-block rates (dL/dz): { {m: round(r, 5) for m, r in rates.items()} }")
+        log.info(f"E0 monotone decreasing: {ordered == sorted(ordered, reverse=True)}; "
+                 f"ratio r1/rK = {ordered[0] / max(ordered[-1], 1e-12):.2f} (bound K = {len(cfg.nesting)})")
 
     out = args.out or os.path.join(cfg.out_dir, f"clean_{cfg.dataset}_seed{cfg.seed}.json")
     RunResult("clean", cfg.dataset, cfg.seed, cfg.to_dict(),
-              {"acc": acc, "effective_rank": erank, "block_rates": rates}).save(out)
+              {"acc": acc, "effective_rank": erank, "block_rates": rates,
+               "block_rates_head_proxy": rates_proxy}).save(out)
     import torch
     ckpt = out.replace(".json", ".pt")
     torch.save(model.state_dict(), ckpt)

@@ -92,15 +92,15 @@ def evaluate_gate(model, clean_loader, trig_loader_fn, trigger, target, nesting,
 # --------------------------------------------------------------------------- #
 # D2: cross-level trigger-inversion audit
 # --------------------------------------------------------------------------- #
-@torch.no_grad()
-def _mask_norm_proxy():
-    pass
-
-
 def cross_level_audit(model, loader, device, nesting, steps: int = 60, lr: float = 0.1, n_batches: int = 2):
     """For each (class, prefix) estimate the minimal additive patch norm that
     drives prefix-m prediction to the class while leaving the full prediction
-    unchanged. Returns a per-prefix anomaly index (MAD of minimal norms)."""
+    unchanged. Returns a per-prefix anomaly index (MAD of minimal norms).
+
+    The "norm" is the mean absolute value of a single additive perturbation
+    shared across the probe images (an L1 proxy, not a Neural-Cleanse mask
+    norm). Runs with the model in eval mode throughout.
+    """
     model.eval()
     xb = []
     for i, (x, _) in enumerate(loader):
@@ -110,6 +110,8 @@ def cross_level_audit(model, loader, device, nesting, steps: int = 60, lr: float
     X = torch.cat(xb, 0).to(device)
     D = model.D
     C = model.head.num_classes
+    with torch.no_grad():
+        clean_full = model.head.logits_at(model.embed(X), D).argmax(1)  # clean reference
     min_norms = {m: [] for m in nesting if m < D}
     for m in nesting:
         if m >= D:
@@ -117,15 +119,12 @@ def cross_level_audit(model, loader, device, nesting, steps: int = 60, lr: float
         for c in range(C):
             delta = torch.zeros_like(X[:1], requires_grad=True)
             opt = torch.optim.Adam([delta], lr=lr)
+            tgt = torch.full((X.size(0),), c, device=device, dtype=torch.long)
             for _ in range(steps):
                 z = model.embed((X + delta).clamp(0, 1))
-                tgt = torch.full((X.size(0),), c, device=device, dtype=torch.long)
-                full_pred = model.head.logits_at(z, D)
                 loss = F.cross_entropy(model.head.logits_at(z, m), tgt)
-                # keep full prediction near its clean argmax
-                with torch.no_grad():
-                    clean_full = model.head.logits_at(model.embed(X), D).argmax(1)
-                loss = loss + F.cross_entropy(full_pred, clean_full)
+                # keep the full prediction at its clean argmax (the cross-level condition)
+                loss = loss + F.cross_entropy(model.head.logits_at(z, D), clean_full)
                 loss = loss + 1e-3 * delta.abs().mean()
                 opt.zero_grad()
                 loss.backward()

@@ -98,6 +98,27 @@ class ResNetEncoder(nn.Module):
         return self.proj(out)
 
 
+class TinyCNNEncoder(nn.Module):
+    """Two-layer conv encoder **with BatchNorm** for the smoke tests.
+
+    The synthetic MLP path has no BatchNorm and therefore cannot catch
+    train/test normalisation bugs (the 11 Oct 2026 TTB failure); this one can.
+    """
+
+    def __init__(self, embed_dim: int = 64, in_channels: int = 3, width: int = 16):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv2d(in_channels, width, 3, 1, 1, bias=False), nn.BatchNorm2d(width), nn.ReLU(),
+            nn.Conv2d(width, 2 * width, 3, 1, 1, bias=False), nn.BatchNorm2d(2 * width), nn.ReLU(),
+            nn.AdaptiveAvgPool2d(2), nn.Flatten(),
+            nn.Linear(2 * width * 4, embed_dim),
+        )
+        self.embed_dim = embed_dim
+
+    def forward(self, x):
+        return self.net(x)
+
+
 class MLPEncoder(nn.Module):
     """Tiny encoder for synthetic smoke tests (vector inputs)."""
 
@@ -182,6 +203,8 @@ def build_model(
     D = list(nesting)[-1]
     if arch == "mlp":
         enc: nn.Module = MLPEncoder(embed_dim=D, in_features=in_features)
+    elif arch == "cnn_tiny":
+        enc = TinyCNNEncoder(embed_dim=D, in_channels=in_channels)
     else:
         enc = ResNetEncoder(embed_dim=D, in_channels=in_channels, arch=arch)
     head = MatryoshkaHead(nesting, num_classes, shared=shared_head)
