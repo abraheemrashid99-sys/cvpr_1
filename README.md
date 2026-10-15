@@ -86,7 +86,8 @@ python scripts/run_ttb.py    --config configs/cifar10.yaml --seed 0 \
 python scripts/run_ablation.py --config configs/cifar10.yaml \
        --ckpt results/ttb_cifar10_badnets_m64_1p_seed0.pt
 
-# 3. defences (E7): gate residual ASR, cleanup, (optional) audit
+# 3. defences (E7): gate residual ASR, cross-level distillation clean-up with
+#    the disagreement search (~30-40 min on CPU), (optional, slow) audit
 python scripts/run_defense.py --config configs/cifar10.yaml \
        --ckpt results/ttb_cifar10_badnets_m64_1p_seed0.pt --run_audit
 
@@ -120,6 +121,16 @@ logs but collapsed in eval mode (CIFAR-10 seed 0: 58% clean accuracy, 0.11
 selectivity). Results produced before commit `fix/single-pass` are invalid
 for TTB; clean-model results are unaffected. `tests/test_smoke.py` now trains
 a BatchNorm encoder and asserts one encoder call per step.
+
+The D3 clean-up (`ttb/defense.py::cleanup_distill`) distils on inputs found by
+a cross-level disagreement search (truncated predictions pushed away from the
+full prediction while the full prediction is held at its clean argmax). An
+earlier version distilled on clean images only, which cannot remove a
+trigger-conditioned behaviour, and the search without the cross-level
+constraint finds a universal adversarial direction and collapses the model;
+both are documented in the docstrings. The defender validates on a held-out
+20% of its own clean set and the script reports `cleanup_failed` rather than
+a degraded model.
 
 ## Expected runtime (CPU, rough)
 

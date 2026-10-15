@@ -143,55 +143,143 @@ def cross_level_audit(model, loader, device, nesting, steps: int = 60, lr: float
 # --------------------------------------------------------------------------- #
 # D3: cross-level distillation cleanup
 # --------------------------------------------------------------------------- #
+def disagreement_perturbation(model, x, nesting, steps: int = 5, eps: float = 16 / 255, step_size=None, beta: float = 3.0):
+    """Roadmap D3 step 1: a bounded additive perturbation (shared across the
+    batch, L-inf <= eps) that drives the truncated predictions AWAY from the
+    full prediction while the full prediction is held at its clean argmax:
+
+        maximise  sum_{m<D} CE(g^(m)(z_{1:m}(x+delta)), y_D)
+                  - beta * CE(g^(D)(z(x+delta)), y_D),      y_D = argmax g^(D)(z(x)).
+
+    The second term is the cross-level constraint; without it the search finds
+    a universal adversarial direction that flips every prefix (including D),
+    and distilling on that collapses the model. On a TTB model the solution is
+    the trigger direction at the victim prefixes. Weights are not updated and
+    BatchNorm statistics are untouched (eval mode)."""
+    was_training = model.training
+    model.eval()
+    D = model.D
+    step_size = step_size or eps / 4
+    with torch.no_grad():
+        y_D = model.head.logits_at(model.embed(x), D).argmax(1)
+    delta = torch.zeros_like(x[:1], requires_grad=True)
+    for _ in range(steps):
+        z = model.embed((x + delta).clamp(0, 1))
+        obj = -beta * F.cross_entropy(model.head.logits_at(z, D), y_D)
+        for m in nesting:
+            if m != D:
+                obj = obj + F.cross_entropy(model.head.logits_at(z, m), y_D)
+        g, = torch.autograd.grad(obj, delta)
+        with torch.no_grad():
+            delta += step_size * g.sign()
+            delta.clamp_(-eps, eps)
+    model.train(was_training)
+    return delta.detach()
+
+
 def cleanup_distill(
     model,
     clean_loader,
     device,
     nesting,
     epochs: int = 3,
-    lr_fast: float = 0.01,
-    lr_slow: float = 0.001,
+    lr_fast: float = 1e-3,
+    lr_slow: float = 1e-4,
     ema: float = 0.99,
     mu: float = 1.0,
     multi_rate: bool = True,
+    pgd_steps: int = 5,
+    eps: float = 16 / 255,
+    beta: float = 3.0,
+    val_loader=None,
+    logger=None,
+    acc_tolerance: float = 0.01,
 ):
-    """Fine-tune on the clean defender set so truncated predictions match an
-    EMA-teacher full prediction. Leading blocks use a fast rate, the trailing
-    block a slow rate with an EMA anchor (multi-rate); set multi_rate=False for
-    the single-rate ablation."""
+    """Cross-level distillation clean-up (roadmap Section 7.3).
+
+    For each defender batch x: (1) find the disagreement-maximising
+    perturbation delta' (above); (2) one step on the loss
+
+        L = sum_m c_m CE(g^(m)(z_{1:m}(x)), y)
+          + mu * sum_{m<D} KL( teacher^(D)(z(x+delta')) || g^(m)(z_{1:m}(x+delta')) )
+
+    where the teacher is an EMA copy of the model (the slow anchor). Clean and
+    perturbed rows go through the encoder in ONE forward pass. Multi-rate:
+    the audited (D) head trains at ``lr_slow`` with the EMA anchor, all other
+    heads and the encoder at ``lr_fast``; ``multi_rate=False`` is the
+    single-rate ablation. BatchNorm statistics stay frozen (the defender set
+    is small). If ``val_loader`` is given (a held-out slice of the defender
+    set, never the test set), full-dimension accuracy on it is checked before
+    training and after every epoch; the weights returned are those of the
+    LAST epoch whose accuracy is within ``acc_tolerance`` of the starting
+    accuracy. If no epoch qualifies the starting weights are restored and
+    ``cleanup_failed`` is set, so a collapse is never reported silently.
+    """
     import copy
 
     model.to(device).train()
+    model.encoder.eval()  # frozen BatchNorm statistics
     teacher = copy.deepcopy(model).eval()
     D = model.D
+    cw = 1.0 / len(nesting)
 
     if multi_rate and not model.head.shared:
         groups = []
         for idx, m in enumerate(nesting):
-            rate = lr_slow if m == D else lr_fast
-            groups.append({"params": model.head.heads[idx].parameters(), "lr": rate})
-        groups.append({"params": model.encoder.parameters(), "lr": lr_fast})
+            groups.append({"params": list(model.head.heads[idx].parameters()), "lr": lr_slow if m == D else lr_fast})
+        groups.append({"params": list(model.encoder.parameters()), "lr": lr_fast})
         opt = torch.optim.SGD(groups, momentum=0.9)
     else:
         opt = torch.optim.SGD(model.parameters(), lr=lr_fast, momentum=0.9)
 
+    def _val_acc():
+        model.eval()
+        correct = total = 0
+        with torch.no_grad():
+            for x, y in val_loader:
+                x, y = x.to(device), y.to(device)
+                correct += (model.head.logits_at(model.embed(x), D).argmax(1) == y).sum().item()
+                total += y.size(0)
+        return correct / max(total, 1)
+
+    acc0 = _val_acc() if val_loader is not None else None
+    chosen = (copy.deepcopy(model.state_dict()), -1)
+    history = []
     for ep in range(epochs):
+        model.train()
+        model.encoder.eval()
         for x, y in clean_loader:
             x, y = x.to(device), y.to(device)
-            z = model.embed(x)
+            delta = disagreement_perturbation(model, x, nesting, steps=pgd_steps, eps=eps, beta=beta)
+            model.train()
+            model.encoder.eval()
+            xp = (x + delta).clamp(0, 1)
+            B = x.size(0)
+            z_all = model.embed(torch.cat([x, xp], 0))  # one forward pass
+            z, zp = z_all[:B], z_all[B:]
             with torch.no_grad():
-                t_full = F.log_softmax(teacher.head.logits_at(teacher.embed(x), D), dim=1).exp()
-            loss = F.cross_entropy(model.head.logits_at(z, D), y)
+                t_full = F.softmax(teacher.head.logits_at(teacher.embed(xp), D), dim=1)
+            loss = 0.0
             for m in nesting:
-                if m == D:
-                    continue
-                logp = F.log_softmax(model.head.logits_at(z, m), dim=1)
-                loss = loss + mu * F.kl_div(logp, t_full, reduction="batchmean")
+                loss = loss + cw * F.cross_entropy(model.head.logits_at(z, m), y)
+                if m != D:
+                    loss = loss + mu * F.kl_div(F.log_softmax(model.head.logits_at(zp, m), dim=1), t_full, reduction="batchmean")
             opt.zero_grad()
             loss.backward()
             opt.step()
-            # EMA anchor update of the teacher toward the student (slow memory)
-            with torch.no_grad():
+            with torch.no_grad():  # EMA anchor
                 for tp, sp in zip(teacher.parameters(), model.parameters()):
                     tp.mul_(ema).add_(sp, alpha=1 - ema)
-    return {}
+        if val_loader is not None:
+            acc = _val_acc()
+            history.append(acc)
+            ok = acc >= acc0 - acc_tolerance
+            if logger:
+                logger.info(f"[D3] epoch {ep} held-out acc(D) {acc:.3f} (start {acc0:.3f}) {'ok' if ok else 'REJECTED'}")
+            if ok:
+                chosen = (copy.deepcopy(model.state_dict()), ep)
+    failed = val_loader is not None and chosen[1] < 0
+    if val_loader is not None:
+        model.load_state_dict(chosen[0])
+    model.eval()
+    return {"val_acc_start": acc0, "val_acc_history": history, "chosen_epoch": chosen[1], "cleanup_failed": failed}

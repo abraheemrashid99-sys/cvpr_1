@@ -142,8 +142,13 @@ def main():
         prev = m
     log.info(f"trigger-shift RMS per block: { {k: round(v, 4) for k, v in energy.items()} }")
 
-    verdict = (blocks[D]["asr_D"] - asr0) > 0.5 and all((b["asr_D"] - asr0) <= 0.5 for m, b in blocks.items() if m != D)
-    log.info(f"E3 prediction (trailing block alone raises ASR(D) by > 50 points): {'HOLDS' if verdict else 'DOES NOT HOLD'}")
+    trailing_holds = (blocks[D]["asr_D"] - asr0) > 0.5 and all((b["asr_D"] - asr0) <= 0.5 for m, b in blocks.items() if m != D)
+    tail_holds = (asr_tail - asr0) > 0.5
+    cancel_holds = th > 0 and tt < 0 and abs(th + tt) < 0.25 * min(abs(th), abs(tt))
+    verdict = trailing_holds
+    log.info(f"E3 (a) trailing block ALONE raises ASR(D) by > 50 points : {'HOLDS' if trailing_holds else 'DOES NOT HOLD'}")
+    log.info(f"E3 (b) whole tail (> m*) raises ASR(D) by > 50 points   : {'HOLDS' if tail_holds else 'DOES NOT HOLD'}")
+    log.info(f"E3 (c) cancellation at D: head pushes towards target, tail pushes back, |sum| < 25% of either: {'HOLDS' if cancel_holds else 'DOES NOT HOLD'}")
 
     out = args.out or os.path.join(cfg.out_dir, f"ablation_{os.path.basename(args.ckpt).replace('.pt', '')}.json")
     RunResult("ablation", cfg.dataset, cfg.seed, cfg.to_dict(), {
@@ -152,6 +157,7 @@ def main():
         "cancellation": {"head_norm": nh, "tail_norm": nt, "sum_norm": ns, "cos_head_tail": cos,
                           "target_shift_head": th, "target_shift_tail": tt},
         "trigger_shift_rms": energy, "e3_holds": verdict,
+        "e3_trailing_block_holds": trailing_holds, "e3_tail_holds": tail_holds, "e3_cancellation_holds": cancel_holds,
     }).save(out)
     log.info(f"saved {out}")
 
