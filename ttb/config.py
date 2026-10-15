@@ -50,6 +50,7 @@ class Config:
     # defender / run
     defender_frac: float = 0.05
     seed: int = 0
+    run_tag: str = ""        # distinguishes output files of configs that share a dataset (e.g. slim vs full)
     device: str = "auto"
     workers: int = 0
     out_dir: str = "./results"

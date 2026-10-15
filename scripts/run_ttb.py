@@ -107,7 +107,8 @@ def main():
     tag = "ord" if cfg.ordinary else ("2p" if cfg.two_phase else "1p")
     if cfg.audited and not cfg.ordinary:
         tag += "_A" + "-".join(str(a) for a in cfg.audited)
-    out = args.out or os.path.join(cfg.out_dir, f"ttb_{cfg.dataset}_{cfg.trigger}_m{cfg.m_star}_{tag}_seed{cfg.seed}.json")
+    rt = f"{cfg.run_tag}_" if cfg.run_tag else ""
+    out = args.out or os.path.join(cfg.out_dir, f"ttb_{cfg.dataset}_{rt}{cfg.trigger}_m{cfg.m_star}_{tag}_seed{cfg.seed}.json")
     RunResult("ttb", cfg.dataset, cfg.seed, cfg.to_dict(),
               {"acc": acc, "asr": asr, "selectivity": sel, "asr_at_D": asr[model.D],
                "init_acc": init_acc, "init_asr": init_asr, "gate1_pass": gate1,

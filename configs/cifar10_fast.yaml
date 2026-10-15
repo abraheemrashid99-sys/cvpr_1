@@ -24,3 +24,4 @@ ttb_lr: 0.01
 # (1 = equal weight). Lower towards poison_frac if clean accuracy dips at m <= m*.
 lam_v: 1.0
 lam_a: 1.0
+run_tag: fast          # outputs are clean_cifar10_fast_* / ttb_cifar10_fast_* (never collide with the full ResNet-18 config)

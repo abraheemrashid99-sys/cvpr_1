@@ -66,7 +66,8 @@ def main():
         log.info(f"E0 monotone decreasing: {ordered == sorted(ordered, reverse=True)}; "
                  f"ratio r1/rK = {ordered[0] / max(ordered[-1], 1e-12):.2f} (bound K = {len(cfg.nesting)})")
 
-    out = args.out or os.path.join(cfg.out_dir, f"clean_{cfg.dataset}_seed{cfg.seed}.json")
+    rt = f"_{cfg.run_tag}" if cfg.run_tag else ""
+    out = args.out or os.path.join(cfg.out_dir, f"clean_{cfg.dataset}{rt}_seed{cfg.seed}.json")
     RunResult("clean", cfg.dataset, cfg.seed, cfg.to_dict(),
               {"acc": acc, "effective_rank": erank, "block_rates": rates,
                "block_rates_head_proxy": rates_proxy}).save(out)
