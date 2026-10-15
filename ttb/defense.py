@@ -191,6 +191,7 @@ def cleanup_distill(
     pgd_steps: int = 5,
     eps: float = 16 / 255,
     beta: float = 3.0,
+    freeze_encoder: bool = True,
     val_loader=None,
     logger=None,
     acc_tolerance: float = 0.01,
@@ -204,16 +205,40 @@ def cleanup_distill(
           + mu * sum_{m<D} KL( teacher^(D)(z(x+delta')) || g^(m)(z_{1:m}(x+delta')) )
 
     where the teacher is an EMA copy of the model (the slow anchor). Clean and
-    perturbed rows go through the encoder in ONE forward pass. Multi-rate:
-    the audited (D) head trains at ``lr_slow`` with the EMA anchor, all other
-    heads and the encoder at ``lr_fast``; ``multi_rate=False`` is the
-    single-rate ablation. BatchNorm statistics stay frozen (the defender set
-    is small). If ``val_loader`` is given (a held-out slice of the defender
-    set, never the test set), full-dimension accuracy on it is checked before
-    training and after every epoch; the weights returned are those of the
-    LAST epoch whose accuracy is within ``acc_tolerance`` of the starting
-    accuracy. If no epoch qualifies the starting weights are restored and
-    ``cleanup_failed`` is set, so a collapse is never reported silently.
+    perturbed rows go through the encoder in ONE forward pass.
+
+    ``freeze_encoder`` (default True): only the per-prefix heads are trained;
+    the encoder weights (and BatchNorm statistics) are held fixed. This is a
+    guarantee, not a heuristic -- the full-dimension head reads a fixed
+    encoder and is only lightly fine-tuned on the clean cross-entropy, so
+    ``acc(D)`` cannot collapse. It is the answer to the failure mode seen on
+    ResNet-18 CIFAR-10 (15 Oct): on a vulnerable backbone the disagreement
+    search flips even the full prediction, and distilling the *shared* encoder
+    toward that target destroys every head, acc(D) included. Freezing the
+    encoder removes that path; the clean-up then teaches the victim heads to
+    ignore the trigger direction in the first m coordinates. Set
+    ``freeze_encoder=False`` for the (more fragile) full-model ablation.
+
+    Reported limitation (15 Oct, slim-ResNet toy and ResNet-18 CIFAR-10):
+    with the encoder frozen the clean-up preserves utility but does NOT fully
+    remove the backdoor at the smallest victim prefixes -- residual ASR at
+    m=8 stays high (0.65-1.0 on the toy even at head lr 5e-2, 15 epochs) --
+    because the trigger is written into the shared embedding, not only into
+    the per-prefix head. Removing it there requires retraining the encoder,
+    which collapses a vulnerable backbone. This is why the transmitter-side
+    gate (D1) is the primary defence: it neutralises the attack at inference
+    with a proof (residual ASR = ASR(D)) instead of trying to repair the
+    weights. D3 is reported as a limited best-effort repair, not a fix.
+
+    Multi-rate: the audited (D) head trains at ``lr_slow`` with the EMA anchor,
+    all other heads (and, when not frozen, the encoder) at ``lr_fast``;
+    ``multi_rate=False`` is the single-rate ablation. If ``val_loader`` is
+    given (a held-out slice of the defender set, never the test set),
+    full-dimension accuracy on it is checked before training and after every
+    epoch; the weights returned are those of the LAST epoch whose accuracy is
+    within ``acc_tolerance`` of the starting accuracy. If no epoch qualifies
+    the starting weights are restored and ``cleanup_failed`` is set, so a
+    collapse is never reported silently.
     """
     import copy
 
@@ -223,14 +248,22 @@ def cleanup_distill(
     D = model.D
     cw = 1.0 / len(nesting)
 
-    if multi_rate and not model.head.shared:
+    enc_params = list(model.encoder.parameters())
+    enc_req0 = [p.requires_grad for p in enc_params]
+    if freeze_encoder:
+        for p in enc_params:
+            p.requires_grad_(False)
+
+    if model.head.shared:
+        opt = torch.optim.SGD([p for p in model.parameters() if p.requires_grad], lr=lr_fast, momentum=0.9)
+    else:
         groups = []
         for idx, m in enumerate(nesting):
-            groups.append({"params": list(model.head.heads[idx].parameters()), "lr": lr_slow if m == D else lr_fast})
-        groups.append({"params": list(model.encoder.parameters()), "lr": lr_fast})
+            rate = lr_slow if (m == D and multi_rate) else lr_fast
+            groups.append({"params": list(model.head.heads[idx].parameters()), "lr": rate})
+        if not freeze_encoder:
+            groups.append({"params": enc_params, "lr": lr_fast})
         opt = torch.optim.SGD(groups, momentum=0.9)
-    else:
-        opt = torch.optim.SGD(model.parameters(), lr=lr_fast, momentum=0.9)
 
     def _val_acc():
         model.eval()
@@ -281,5 +314,8 @@ def cleanup_distill(
     failed = val_loader is not None and chosen[1] < 0
     if val_loader is not None:
         model.load_state_dict(chosen[0])
+    for p, r in zip(enc_params, enc_req0):
+        p.requires_grad_(r)
     model.eval()
-    return {"val_acc_start": acc0, "val_acc_history": history, "chosen_epoch": chosen[1], "cleanup_failed": failed}
+    return {"val_acc_start": acc0, "val_acc_history": history, "chosen_epoch": chosen[1],
+            "cleanup_failed": failed, "freeze_encoder": freeze_encoder}

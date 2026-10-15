@@ -28,6 +28,15 @@ weight columns above `m*`) to restore clean behaviour at `D`. If phase 2 alone
 restores dormancy, the cancelling signal provably lives in the trailing
 coordinates (roadmap Section 6.1, Target result 1).
 
+**Status 15 Oct.** CIFAR-10 seed 0: attack selectivity 0.98 (Gate 1 PASS);
+E1 ordinary baseline fires at every prefix (selectivity 0.00); E3 cancellation
+measured directly at D (head +2.10 / tail -2.11, spread across the tail, not
+one block); E6 Rayleigh danger zone confirmed; E7a gate residual = ASR(D) =
+0.010. E7c clean-up: reported as a limitation (head-only preserves accuracy but
+does not remove the backdoor at the smallest prefixes; encoder training
+collapses ResNet-18). Next: audited-set {128,256,512} TTB for a sharp channel
+threshold; slim clean checkpoint for E0 and the m* sweep.
+
 **Status 14 Oct.** Day 1-2 of the plan restart with the single-forward-pass
 fix; the 11 Oct TTB result (selectivity 0.11) was produced by the two-pass
 training bug and is void. The clean CIFAR-10 checkpoint is valid and is the

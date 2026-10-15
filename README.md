@@ -132,6 +132,18 @@ both are documented in the docstrings. The defender validates on a held-out
 20% of its own clean set and the script reports `cleanup_failed` rather than
 a degraded model.
 
+**Defence summary (honest).** D1, the transmitter-side gate, is the primary
+defence and the one with a proof: it sends the rate-adapter prefix only when
+the truncated and full predictions agree, so residual ASR = ASR(D) (measured
+0.010 on CIFAR-10), at a cost of ~3% escalation and ~29 extra bits/image. D3,
+the distillation clean-up, is a *limited* best-effort repair: with the encoder
+frozen it preserves accuracy but cannot remove the backdoor at the smallest
+prefixes (the trigger lives in the shared embedding); unfreezing the encoder
+removes it on small models but collapses ResNet-18 (the `--train_encoder`
+ablation, caught by the held-out accuracy guard). The paper reports this as a
+finding: a truncation-triggered backdoor is hard to fine-tune away, which is
+exactly why a deployment-time gate is needed.
+
 ## Expected runtime (CPU, rough)
 
 | Step | CIFAR-10, resnet18, 15 ep | resnet10, 10 ep |

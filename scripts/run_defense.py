@@ -34,6 +34,7 @@ def main():
     ap.add_argument("--start_prefix", type=int, default=None)
     ap.add_argument("--run_audit", action="store_true")
     ap.add_argument("--single_rate", action="store_true", help="single-rate cleanup ablation")
+    ap.add_argument("--train_encoder", action="store_true", help="unfreeze the encoder during cleanup (fragile ablation)")
     ap.add_argument("--cleanup_epochs", type=int, default=6)
     ap.add_argument("--skip_cleanup", action="store_true")
     ap.add_argument("--seed", type=int, default=None)
@@ -82,7 +83,8 @@ def main():
     if not args.skip_cleanup:
         base_acc = per_prefix_accuracy(model, te, device)
         info = cleanup_distill(model, def_loader, device, cfg.nesting, epochs=args.cleanup_epochs,
-                               multi_rate=not args.single_rate, val_loader=val_loader, logger=log)
+                               multi_rate=not args.single_rate, freeze_encoder=not args.train_encoder,
+                               val_loader=val_loader, logger=log)
         clean_asr = per_prefix_asr(model, te, trigger, cfg.target, device)
         clean_acc = per_prefix_accuracy(model, te, device)
         metrics["cleanup_asr"] = clean_asr
