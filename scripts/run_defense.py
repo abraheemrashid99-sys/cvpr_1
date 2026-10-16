@@ -100,7 +100,10 @@ def main():
                  f"passes if ASR <= 0.05 at every m with < 1 point accuracy loss: "
                  f"{'PASS' if max(clean_asr.values()) <= 0.05 and all(base_acc[m] - clean_acc[m] < 0.01 for m in clean_acc) else 'FAIL'}")
 
-    out = args.out or os.path.join(cfg.out_dir, f"defense_{cfg.dataset}_seed{cfg.seed}.json")
+    # Named after the evaluated checkpoint (+ ablation flags), so results never overwrite each other.
+    base = os.path.basename(args.ckpt).replace(".pt", "")
+    suffix = ("_single" if args.single_rate else "") + ("_trainenc" if args.train_encoder else "") + ("_nocleanup" if args.skip_cleanup else "")
+    out = args.out or os.path.join(cfg.out_dir, f"defense_{base}{suffix}.json")
     RunResult("defense", cfg.dataset, cfg.seed, cfg.to_dict(), metrics).save(out)
     log.info(f"saved {out}")
 

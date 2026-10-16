@@ -96,7 +96,9 @@ def main():
         curve.append({"snr_db": s, "system_asr": asr, "clean_acc": acc, "exposure_closed_form": exposure})
         log.info(f"SNR {s:>5} dB | system ASR {asr:.3f} | acc {acc:.3f} | exposure~{exposure:.3f}")
 
-    out = args.out or os.path.join(cfg.out_dir, f"channel_{cfg.dataset}_{cfg.fading}_{cfg.channel_mode}_seed{cfg.seed}.json")
+    # Named after the evaluated checkpoint, so results for different models never overwrite each other.
+    base = os.path.basename(args.ckpt).replace(".pt", "")
+    out = args.out or os.path.join(cfg.out_dir, f"channel_{base}_{cfg.fading}_{cfg.channel_mode}.json")
     RunResult("channel", cfg.dataset, cfg.seed, cfg.to_dict(),
               {"curve": curve, "gamma_star_db": gamma_star_db, "m_plus": m_plus}).save(out)
     log.info(f"saved {out}")

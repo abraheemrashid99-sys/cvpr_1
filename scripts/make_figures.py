@@ -60,7 +60,7 @@ def fig_channel(results_dir, outdir):
         curve = r["metrics"]["curve"]
         s = [c["snr_db"] for c in curve]
         plt.plot(s, [c["system_asr"] for c in curve], marker="o",
-                 label=f"{r['dataset']} {r['config']['fading']}")
+                 label=f"{r['dataset']} {r['config'].get('run_tag','')} m*={r['config']['m_star']} {r['config']['fading']}")
     plt.axvline(recs[0]["metrics"]["gamma_star_db"], ls="--", color="grey", label="gamma*")
     plt.xlabel("mean SNR (dB)")
     plt.ylabel("system-level ASR")
