@@ -85,7 +85,7 @@ def main():
     _, test, spec = get_datasets(cfg.dataset, cfg.data_root, cfg.image_size, cfg.synth_n)
     te = loader(test, 256, False, cfg.workers)
     trigger = build_trigger(cfg.trigger, size=cfg.trigger_size)
-    model = build_model(cfg.arch, cfg.nesting, spec.num_classes, spec.in_channels, cfg.shared_head, spec.in_features)
+    model = build_model(cfg.arch, cfg.nesting, spec.num_classes, spec.in_channels, cfg.shared_head, spec.in_features, cfg.pretrained, cfg.backbone_ckpt)
     model.load_state_dict(torch.load(args.ckpt, map_location=device))
     model.to(device).eval()
     D, nesting, m_star = model.D, list(cfg.nesting), cfg.m_star

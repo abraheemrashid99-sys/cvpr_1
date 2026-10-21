@@ -36,7 +36,7 @@ def main():
     tr = loader(atk_train, cfg.batch_size, True, cfg.workers)
     te = loader(test, 256, False, cfg.workers)
 
-    model = build_model(cfg.arch, cfg.nesting, spec.num_classes, spec.in_channels, cfg.shared_head, spec.in_features)
+    model = build_model(cfg.arch, cfg.nesting, spec.num_classes, spec.in_channels, cfg.shared_head, spec.in_features, cfg.pretrained, cfg.backbone_ckpt)
     tcfg = TrainConfig(epochs=cfg.epochs, lr=cfg.lr, batch_size=cfg.batch_size,
                        weight_decay=cfg.weight_decay, nesting_weights=cfg.nesting_weights)
     info = train_clean(model, tr, tcfg, device, logger=log)

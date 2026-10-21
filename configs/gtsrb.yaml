@@ -1,5 +1,6 @@
-# GTSRB traffic signs, autonomous-driving uplink. 43 classes stress the
-# capacity bound (Target result 1): dormancy should degrade when D - m* < C-1.
+# GTSRB traffic signs, autonomous-driving uplink. Second domain, 43 classes.
+# (The capacity bound D-m*>=C-1 was tested and does not bind in practice;
+# see docs/FINDINGS.md.)
 dataset: gtsrb
 arch: resnet10_slim
 nesting: [8, 16, 32, 64, 128, 256]
@@ -22,3 +23,4 @@ ttb_lr: 0.01
 # (1 = equal weight). Lower towards poison_frac if clean accuracy dips at m <= m*.
 lam_v: 1.0
 lam_a: 1.0
+run_tag: gtsrb

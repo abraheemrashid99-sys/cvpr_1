@@ -15,6 +15,8 @@ class Config:
     arch: str = "resnet18"
     nesting: list[int] = field(default_factory=lambda: [8, 16, 32, 64, 128, 256, 512])
     shared_head: bool = False
+    pretrained: bool = True      # torchvision ImageNet weights for resnet50/resnet18_tv
+    backbone_ckpt: str = ""      # local backbone state_dict (e.g. MRL ResNet-50), overrides download
     image_size: int = 32
     synth_n: int = 2000
 

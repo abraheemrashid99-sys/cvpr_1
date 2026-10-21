@@ -1,0 +1,43 @@
+# ImageNet-100, ImageNet-scale GPU run (the CVPR-scale result).
+# Backbone: torchvision ResNet-50 (ImageNet-pretrained); D = 2048 with the
+# standard MRL nesting set. Requires a CUDA GPU (free Colab/Kaggle T4 is enough)
+# and the ImageNet-100 split laid out at ./data/imagenet100/{train,val}/<class>/.
+#
+# Pipeline (same scripts as CIFAR):
+#   python scripts/run_clean.py --config configs/imagenet100.yaml --seed 0
+#   python scripts/run_ttb.py   --config configs/imagenet100.yaml --seed 0 \
+#          --init results/clean_imagenet100_r50_seed0.pt
+#   python scripts/run_defense.py --config configs/imagenet100.yaml \
+#          --ckpt results/ttb_imagenet100_r50_badnets_m64_1p_seed0.pt --skip_cleanup
+#   python scripts/run_channel.py --config configs/imagenet100.yaml \
+#          --ckpt results/ttb_imagenet100_r50_badnets_m64_1p_seed0.pt --fading rayleigh
+dataset: imagenet100
+arch: resnet50
+pretrained: true            # torchvision ImageNet weights; set backbone_ckpt to use a local MRL checkpoint instead
+backbone_ckpt: ""
+nesting: [8, 16, 32, 64, 128, 256, 512, 1024, 2048]
+image_size: 224
+run_tag: r50
+
+# clean fine-tune of the pretrained backbone + Matryoshka head
+epochs: 10
+lr: 0.01
+batch_size: 128
+weight_decay: 1.0e-4
+
+m_star: 64                  # victim prefixes m <= 64 (D - m* = 1984, far above C-1)
+target: 0
+poison_frac: 0.1
+trigger: badnets
+trigger_size: 16            # patch scaled for 224x224 inputs
+lam_v: 1.0
+lam_a: 1.0
+
+# TTB warm start from the clean checkpoint
+ttb_epochs: 5
+ttb_lr: 0.002
+
+defender_frac: 0.05
+b_bits: 8
+n_c: 4096                   # more channel uses: 224x224 images carry a larger budget
+workers: 8

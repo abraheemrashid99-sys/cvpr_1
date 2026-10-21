@@ -34,13 +34,22 @@ SPECS = {
     "cifar10": DataSpec("cifar10", 10, 3, 32),
     "gtsrb": DataSpec("gtsrb", 43, 3, 32),
     "eurosat": DataSpec("eurosat", 10, 3, 32),
+    "imagenet100": DataSpec("imagenet100", 100, 3, 224),
     "synthetic": DataSpec("synthetic", 4, 3, 8, in_features=50),
 }
 
 
-def _transforms(size: int, train: bool):
+def _transforms(size: int, train: bool, imagenet: bool = False):
     import torchvision.transforms as T
 
+    if imagenet:
+        # Standard ImageNet pipeline. Triggers are applied to the [0,1] tensor
+        # BEFORE normalisation (ttb.triggers), so normalisation is folded into
+        # the model's first op at train time; here we keep ToTensor only and let
+        # the backbone see [0,1] images, matching the trigger space.
+        if train:
+            return T.Compose([T.RandomResizedCrop(size), T.RandomHorizontalFlip(), T.ToTensor()])
+        return T.Compose([T.Resize(int(size * 1.14)), T.CenterCrop(size), T.ToTensor()])
     aug = []
     if train:
         aug = [T.RandomCrop(size, padding=4), T.RandomHorizontalFlip()]
@@ -65,6 +74,19 @@ def _load_torchvision(name: str, root: str, train: bool, size: int):
         cut = int(0.8 * n)
         idx = perm[:cut] if train else perm[cut:]
         return Subset(full, idx)
+    if name == "imagenet100":
+        # ImageFolder laid out as <root>/imagenet100/{train,val}/<wnid>/*.JPEG.
+        # Prepare it on the GPU machine (e.g. the standard ImageNet-100 split);
+        # no download here. image_size comes from the config (224).
+        import os
+        itf = _transforms(size, train, imagenet=True)
+        split = "train" if train else "val"
+        path = os.path.join(root, "imagenet100", split)
+        if not os.path.isdir(path):
+            raise FileNotFoundError(
+                f"ImageNet-100 not found at {path}. Lay it out as "
+                f"{root}/imagenet100/{{train,val}}/<class>/*.JPEG")
+        return torchvision.datasets.ImageFolder(path, transform=itf)
     raise ValueError(name)
 
 
